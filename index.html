@@ -830,8 +830,16 @@ async function checkUpdate(silent) {
 document.getElementById('btnCheckUpdate').addEventListener('click', ()=>checkUpdate(false));
 document.getElementById('btnUpdateNow').addEventListener('click', function(){
   fetch(UPDATE_URL, {cache:'no-cache'}).then(r=>r.json()).then(info=>{
-    window.open(info.apkUrl, '_blank');
-  }).catch(()=>{});
+    // Try in-app download first; fallback to browser
+    var installUrl = 'daytally://update?url=' + encodeURIComponent(info.apkUrl);
+    var start = Date.now();
+    location.href = installUrl;
+    // If not back in 1.5s, App didn't intercept → open browser
+    setTimeout(function(){
+      if (Date.now() - start < 1800) return;
+      window.open(info.apkUrl, '_blank');
+    }, 1500);
+  }).catch(function(){});
   document.getElementById('updateModal').classList.add('hidden');
 });
 document.getElementById('btnUpdateLater').addEventListener('click', function(){
