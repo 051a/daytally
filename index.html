@@ -303,7 +303,7 @@
   }
 
   /* empty state */
-  .empty-state { text-align: center; padding: 60px 20px; opacity: 0.4; }
+  .empty-state { text-align: center; padding: 60px 20px; opacity: 0.75; }
   .empty-state .big-emoji { font-size: 56px; margin-bottom: 12px; }
   .empty-state p { font-size: 14px; }
 
@@ -345,8 +345,7 @@
 <!-- bottom toolbar -->
 <div class="toolbar" id="toolbar">
   <button class="btn-global" id="btnGlobalBg">🖼 全局背景</button>
-  <button class="btn-global" id="btnExport">📤 导出</button>
-  <button class="btn-global" id="btnImport">📥 导入</button>
+  <button class="btn-global" id="btnShareApp">📤 分享 App</button>
   <button class="btn-global" id="btnCheckUpdate">🔄 检查更新</button>
 </div>
 
@@ -404,8 +403,8 @@
 const STORAGE_KEY = 'daytally_events';
 const BG_KEY = 'daytally_global_bg';
 const VERSION_KEY = 'daytally_version';
-const CURRENT_VERSION = 1;
-const APP_VERSION_NAME = '1.0';
+const CURRENT_VERSION = 4;
+const APP_VERSION_NAME = '1.3';
 // REPLACE with your GitHub Pages URL after deployment:
 const UPDATE_URL = 'https://051a.github.io/daytally/version.json';
 
@@ -625,6 +624,7 @@ function openDetail(id) {
     </div>
     ${noteBlock}
     <div class="d-actions">
+      <button class="btn-icon" id="btnDetailShare" style="flex:1;border-radius:14px;padding:13px;">📤 分享</button>
       <button class="btn-icon" id="btnDetailEdit" style="flex:1;border-radius:14px;padding:13px;">✎ 编辑</button>
       <button class="btn-icon" id="btnDetailArchive" style="flex:1;border-radius:14px;padding:13px;">📦 ${ev.archived?'恢复':'归档'}</button>
       <button class="btn-icon danger" id="btnDetailDelete" style="flex:1;border-radius:14px;padding:13px;">✕ 删除</button>
@@ -635,6 +635,15 @@ function openDetail(id) {
   document.getElementById('btnDetailEdit').onclick = function(){ closeDetail(); openEditModal(id); };
   document.getElementById('btnDetailArchive').onclick = function(){
     ev.archived = !ev.archived; saveEvents(); closeDetail(); renderEvents();
+  };
+  document.getElementById('btnDetailShare').onclick = function(){
+    var info = classifyEvent(ev);
+    var text = (ev.emoji||'') + ' ' + ev.name + '\n' + info.label + ' ' + (info.num||info.label) + '\n📅 ' + ev.date + '\n\n📲 日子 · DayTally';
+    if (navigator.share) {
+      navigator.share({ title: ev.name, text: text }).catch(function(){});
+    } else {
+      navigator.clipboard.writeText(text).then(function(){ alert('已复制！'); });
+    }
   };
   document.getElementById('btnDetailDelete').onclick = function(){
     if(confirm('确定删除？')){ events = events.filter(e=>e.id!==id); saveEvents(); closeDetail(); renderEvents(); }
@@ -850,29 +859,22 @@ document.getElementById('btnUpdateLater').addEventListener('click', function(){
 //  TOOLBAR
 // ═══════════════════════════════════════
 document.getElementById('addBtn').addEventListener('click', openAddModal);
-document.getElementById('btnExport').addEventListener('click', function(){
-  const data = { events, globalBg: localStorage.getItem(BG_KEY)||'', exportedAt: new Date().toISOString() };
-  const b = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download='daytally-backup-'+todayStr()+'.json'; a.click();
-});
-document.getElementById('btnImport').addEventListener('click', function(){
-  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
-  inp.onchange = function(){
-    if(!this.files||!this.files[0]) return;
-    const r=new FileReader();
-    r.onload=function(e){
-      try{
-        const d=JSON.parse(e.target.result);
-        if(!d.events||!Array.isArray(d.events)){alert('无效的备份文件');return;}
-        if(!confirm(`即将导入 ${d.events.length} 个事件，会覆盖现有数据，确认？`)) return;
-        events=d.events; saveEvents();
-        if(d.globalBg){saveGlobalBg(d.globalBg);loadGlobalBg();}
-        renderEvents(); alert('导入成功！');
-      }catch(err){alert('解析失败: '+err.message);}
-    };
-    r.readAsText(this.files[0]);
-  };
-  inp.click();
+// Share app
+document.getElementById('btnShareApp').addEventListener('click', function(){
+  var text = '📅 日子 · DayTally — 记录每个重要日子\n';
+  if (events.length > 0) {
+    var upcoming = events.filter(function(e){return !e.archived;}).slice(0,3);
+    upcoming.forEach(function(ev){
+      var info = classifyEvent(ev);
+      text += '\n' + (ev.emoji||'') + ' ' + ev.name + ' ' + (info.num||info.label);
+    });
+  }
+  text += '\n\n👉 https://051a.github.io/daytally/';
+  if (navigator.share) {
+    navigator.share({ title: '日子 · DayTally', text: text }).catch(function(){});
+  } else {
+    navigator.clipboard.writeText(text).then(function(){ alert('已复制到剪贴板！'); });
+  }
 });
 
 // ═══════════════════════════════════════
@@ -891,20 +893,27 @@ setInterval(function(){
 //  INIT
 // ═══════════════════════════════════════
 function init() {
-  loadEvents(); loadGlobalBg(); autoArchive();
-  document.body.dataset.lastDay = todayStr();
-  document.getElementById('verLabel').textContent = APP_VERSION_NAME;
-  renderEvents(); renderSelectors();
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(function(){});
+  try {
+    loadEvents(); loadGlobalBg(); autoArchive();
+    document.body.dataset.lastDay = todayStr();
+    var vl = document.getElementById('verLabel');
+    if (vl) vl.textContent = APP_VERSION_NAME;
+    renderEvents(); renderSelectors();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    }
+    document.addEventListener('keydown', function(e) { if (e.key==='Escape') { closeModal(); closeDetail(); } });
+    setTimeout(function(){ checkUpdate(true); }, 3000);
+    setTimeout(checkReminders, 2000);
+  } catch(e) {
+    document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:9999;font-size:13px;">Error: '+e.message+'</div>';
   }
-  document.addEventListener('keydown', function(e) { if (e.key==='Escape') { closeModal(); closeDetail(); } });
-  // startup update check (silent, delay 3s to not block UI)
-  setTimeout(() => checkUpdate(true), 3000);
-  // reminder check
-  setTimeout(checkReminders, 2000);
 }
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
 </body>
 </html>
