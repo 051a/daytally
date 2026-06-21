@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f1a">
+<title>日子 · DayTally</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --card-radius: 18px;
+    --gap: 14px;
+    --safe-bottom: env(safe-area-inset-bottom, 16px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow-x: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Helvetica Neue', sans-serif;
+    background: #0f0f1a; color: #fff;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+  }
+
+  /* ── global bg ── */
+  .global-bg {
+    position: fixed; inset: 0; z-index: 0;
+    background: #0f0f1a center/cover no-repeat;
+    transition: background-image 0.5s;
+  }
+
+  /* ── main scroll ── */
+  .main-scroll {
+    position: relative; z-index: 1;
+    height: 100%; overflow-y: auto; overflow-x: hidden;
+    padding: 20px 16px calc(90px + var(--safe-bottom));
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* ── header ── */
+  .header { text-align: center; padding: 10px 0 14px; }
+  .header h1 { font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
+  .header .sub { font-size: 12px; opacity: 0.5; font-weight: 400; }
+
+  /* ── category tabs ── */
+  .cat-tabs {
+    display: flex; gap: 8px; padding: 0 0 14px; overflow-x: auto;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .cat-tabs::-webkit-scrollbar { display: none; }
+  .cat-tab {
+    flex-shrink: 0; padding: 8px 16px; border-radius: 20px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55);
+    border: 1px solid transparent; transition: all 0.2s;
+  }
+  .cat-tab.active { background: rgba(94,92,230,0.25); color: #fff; border-color: #5E5CE6; }
+
+  /* ── event card ── */
+  .card {
+    position: relative; border-radius: var(--card-radius);
+    margin-bottom: var(--gap); overflow: hidden; min-height: 160px;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35); cursor: pointer;
+  }
+  .card:active { transform: scale(0.98); }
+
+  /* preset template backgrounds */
+  .card.t-g1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+  .card.t-g2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+  .card.t-g3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+  .card.t-g4 { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+  .card.t-g5 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+  .card.t-g6 { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
+  .card.t-g7 { background: linear-gradient(135deg, #0c0c1d 0%, #1a1a3e 50%, #2d1b69 100%); }
+  .card.t-g8 { background: linear-gradient(135deg, #1a1a2e 0%, #0f3443 100%); }
+  .card.t-g9 { background: linear-gradient(135deg, #3e1a47 0%, #16213e 50%, #0f0f1a 100%); }
+
+  .card .card-bg {
+    position: absolute; inset: -4px;
+    background: center/cover no-repeat; z-index: 0;
+    transition: filter 0.25s;
+  }
+  .card .card-overlay {
+    position: absolute; inset: 0; z-index: 1;
+    background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 100%);
+    border-radius: var(--card-radius);
+  }
+  .card .card-content {
+    position: relative; z-index: 2;
+    padding: 56px 16px 14px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .card .card-top {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card .event-name { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .card .event-emoji { font-size: 28px; line-height: 1; }
+  .card .event-cat { font-size: 11px; opacity: 0.6; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 10px; }
+  .card .event-date { font-size: 13px; opacity: 0.75; }
+  .card .days-number { font-size: 42px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+  .card .days-label { font-size: 13px; font-weight: 500; opacity: 0.85; }
+  .card .progress-bar {
+    height: 3px; border-radius: 2px; background: rgba(255,255,255,0.15); margin-top: 2px; overflow: hidden;
+  }
+  .card .progress-fill { height: 100%; border-radius: 2px; background: rgba(255,255,255,0.5); transition: width 1s; }
+
+  .card.is-today .days-number { color: #FFD60A; }
+  .card.is-future .days-number { color: #5E5CE6; }
+  .card.is-past .days-number { color: #30D158; }
+
+  /* controls */
+  .card-controls { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .blur-group {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(255,255,255,0.1); border-radius: 20px;
+    padding: 4px 10px; backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); flex: 1; min-width: 100px;
+  }
+  .blur-group label { font-size: 11px; opacity: 0.7; white-space: nowrap; }
+  .blur-group input[type=range] {
+    flex: 1; height: 4px; -webkit-appearance: none;
+    background: rgba(255,255,255,0.25); border-radius: 2px; outline: none;
+  }
+  .blur-group input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .blur-val { font-size: 11px; opacity: 0.6; min-width: 22px; text-align: right; }
+
+  .btn-icon {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: none; background: rgba(255,255,255,0.12); color: #fff;
+    font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: background 0.15s; flex-shrink: 0;
+  }
+  .btn-icon:active { background: rgba(255,255,255,0.25); }
+  .btn-icon.danger { color: #FF453A; }
+
+  /* add button */
+  .add-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; padding: 16px;
+    border: 2px dashed rgba(255,255,255,0.18);
+    border-radius: var(--card-radius);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.55); font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s, color 0.15s; margin-bottom: var(--gap);
+  }
+  .add-btn:active { background: rgba(255,255,255,0.08); color: #fff; }
+
+  /* history section */
+  .history-section { margin-top: 8px; }
+  .history-toggle {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 12px; color: rgba(255,255,255,0.4); font-size: 13px; cursor: pointer;
+    transition: color 0.2s;
+  }
+  .history-toggle:active { color: #fff; }
+
+  /* bottom toolbar */
+  .toolbar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+    padding: 10px 16px calc(10px + var(--safe-bottom));
+    display: flex; gap: 8px;
+    background: rgba(15,15,26,0.85);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .toolbar .btn-global {
+    flex: 1; padding: 10px 6px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06); color: #fff;
+    font-size: 12px; font-weight: 600; cursor: pointer; text-align: center;
+    transition: background 0.15s;
+  }
+  .toolbar .btn-global:active { background: rgba(255,255,255,0.15); }
+
+  /* ── modal ── */
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    display: flex; align-items: flex-end; justify-content: center;
+    animation: fadeIn 0.2s;
+  }
+  .modal-mask.hidden { display: none; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  .modal-sheet {
+    width: 100%; max-width: 480px;
+    background: #1c1c2e; border-radius: 20px 20px 0 0;
+    padding: 10px 20px calc(20px + var(--safe-bottom));
+    animation: slideUp 0.25s ease-out;
+    max-height: 85vh; overflow-y: auto;
+  }
+  .modal-sheet h3 { font-size: 18px; text-align: center; padding: 8px 0 16px; }
+  .modal-sheet .field { margin-bottom: 14px; }
+  .modal-sheet label { font-size: 13px; opacity: 0.6; display: block; margin-bottom: 5px; }
+  .modal-sheet input[type=text],
+  .modal-sheet input[type=date],
+  .modal-sheet textarea {
+    width: 100%; padding: 12px 14px;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06); color: #fff;
+    font-size: 16px; outline: none; font-family: inherit;
+    transition: border-color 0.15s; resize: vertical;
+  }
+  .modal-sheet textarea { min-height: 60px; font-size: 14px; }
+  .modal-sheet input:focus, .modal-sheet textarea:focus { border-color: rgba(255,255,255,0.35); }
+
+  .emoji-grid, .cat-grid, .template-grid {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .emoji-option, .cat-option, .template-option {
+    padding: 8px 12px; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    border-radius: 12px; cursor: pointer;
+    background: rgba(255,255,255,0.04); border: 2px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .emoji-option { width: 40px; height: 40px; font-size: 22px; padding: 0; }
+  .template-option { width: 48px; height: 48px; border-radius: 14px; padding: 0; }
+  .option-selected { border-color: #5E5CE6; background: rgba(94,92,230,0.2); }
+  .emoji-option:active, .cat-option:active, .template-option:active { background: rgba(255,255,255,0.1); }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .modal-actions button {
+    flex: 1; padding: 14px; border-radius: 14px;
+    font-size: 16px; font-weight: 600; cursor: pointer; border: none;
+    transition: opacity 0.15s;
+  }
+  .modal-actions button:active { opacity: 0.7; }
+  .btn-primary { background: #5E5CE6; color: #fff; }
+  .btn-cancel { background: rgba(255,255,255,0.08); color: #fff; }
+  .btn-danger { background: #FF453A; color: #fff; }
+
+  /* detail panel */
+  .detail-mask {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.5); display: flex; align-items: flex-end;
+    animation: fadeIn 0.2s;
+  }
+  .detail-mask.hidden { display: none; }
+  .detail-sheet {
+    width: 100%; max-width: 480px; max-height: 80vh; overflow-y: auto;
+    background: #1c1c2e; border-radius: 20px 20px 0 0;
+    padding: 20px; padding-bottom: calc(20px + var(--safe-bottom));
+    animation: slideUp 0.25s ease-out;
+  }
+  .detail-sheet .d-num { font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: -2px; text-align: center; }
+  .detail-sheet .d-label { font-size: 16px; opacity: 0.6; text-align: center; margin: 6px 0 16px; }
+  .detail-sheet .d-info { display: flex; gap: 12px; justify-content: center; margin-bottom: 16px; }
+  .detail-sheet .d-info-item {
+    text-align: center; background: rgba(255,255,255,0.06); border-radius: 14px;
+    padding: 12px 20px;
+  }
+  .detail-sheet .d-info-val { font-size: 24px; font-weight: 700; }
+  .detail-sheet .d-info-lbl { font-size: 11px; opacity: 0.5; margin-top: 2px; }
+  .detail-sheet .d-note {
+    background: rgba(255,255,255,0.04); border-radius: 12px; padding: 14px;
+    font-size: 14px; opacity: 0.7; margin-bottom: 16px; white-space: pre-wrap;
+  }
+  .detail-sheet .d-progress {
+    height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-bottom: 20px; overflow: hidden;
+  }
+  .detail-sheet .d-progress-fill { height: 100%; border-radius: 3px; transition: width 1s; }
+  .detail-sheet .d-actions { display: flex; gap: 10px; }
+  .detail-sheet .d-actions button {
+    flex: 1; padding: 13px; border-radius: 14px; font-size: 14px; font-weight: 600;
+    cursor: pointer; border: none; transition: opacity 0.15s;
+  }
+
+  /* update modal */
+  .update-modal {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.2s; padding: 20px;
+  }
+  .update-modal.hidden { display: none; }
+  .update-card {
+    width: 100%; max-width: 320px;
+    background: #1c1c2e; border-radius: 20px; padding: 24px; text-align: center;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  }
+  .update-card .u-icon { font-size: 48px; margin-bottom: 12px; }
+  .update-card h3 { font-size: 20px; margin-bottom: 8px; }
+  .update-card .u-log { font-size: 13px; opacity: 0.65; margin-bottom: 8px; white-space: pre-line; line-height: 1.6; }
+  .update-card .u-size { font-size: 12px; opacity: 0.4; margin-bottom: 20px; }
+  .update-card .u-actions { display: flex; gap: 10px; }
+  .update-card .u-actions button {
+    flex: 1; padding: 12px; border-radius: 14px; font-size: 14px; font-weight: 600;
+    cursor: pointer; border: none; transition: opacity 0.15s;
+  }
+
+  /* empty state */
+  .empty-state { text-align: center; padding: 60px 20px; opacity: 0.4; }
+  .empty-state .big-emoji { font-size: 56px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* scrollbar */
+  .main-scroll::-webkit-scrollbar { width: 0; }
+</style>
+</head>
+<body>
+
+<div class="global-bg" id="globalBg"></div>
+
+<div class="main-scroll" id="mainScroll">
+  <div class="header">
+    <h1>📅 日子</h1>
+    <div class="sub">DayTally v<span id="verLabel">1.0</span></div>
+  </div>
+
+  <!-- category tabs -->
+  <div class="cat-tabs" id="catTabs">
+    <span class="cat-tab active" data-cat="all">全部</span>
+    <span class="cat-tab" data-cat="🎉节日">🎉 节日</span>
+    <span class="cat-tab" data-cat="🎂生日">🎂 生日</span>
+    <span class="cat-tab" data-cat="✈️旅行">✈️ 旅行</span>
+    <span class="cat-tab" data-cat="📝考试">📝 考试</span>
+    <span class="cat-tab" data-cat="💕纪念日">💕 纪念日</span>
+    <span class="cat-tab" data-cat="📌其他">📌 其他</span>
+  </div>
+
+  <div id="eventList"></div>
+  <button class="add-btn" id="addBtn">＋ 添加新日子</button>
+
+  <!-- history -->
+  <div class="history-section" id="historySection" style="display:none;">
+    <div class="history-toggle" id="historyToggle">📦 查看历史事件</div>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<!-- bottom toolbar -->
+<div class="toolbar" id="toolbar">
+  <button class="btn-global" id="btnGlobalBg">🖼 全局背景</button>
+  <button class="btn-global" id="btnExport">📤 导出</button>
+  <button class="btn-global" id="btnImport">📥 导入</button>
+  <button class="btn-global" id="btnCheckUpdate">🔄 检查更新</button>
+</div>
+
+<!-- hidden file inputs -->
+<input type="file" accept="image/*" id="globalFileInput" style="display:none">
+<input type="file" accept="image/*" id="cardFileInput" style="display:none">
+
+<!-- add/edit modal -->
+<div class="modal-mask hidden" id="eventModal">
+  <div class="modal-sheet">
+    <h3 id="modalTitle">添加新日子</h3>
+    <div class="field"><label>名称</label><input type="text" id="fieldName" placeholder="例如：春节、生日、旅行…" maxlength="24"></div>
+    <div class="field"><label>日期</label><input type="date" id="fieldDate"></div>
+    <div class="field"><label>分类</label><div class="cat-grid" id="catGrid"></div></div>
+    <div class="field"><label>卡片背景</label><div class="template-grid" id="templateGrid"></div></div>
+    <div class="field"><label>图标</label><div class="emoji-grid" id="emojiGrid"></div></div>
+    <div class="field"><label>备注</label><textarea id="fieldNote" rows="2" placeholder="选填…"></textarea></div>
+    <div class="field" style="display:flex;align-items:center;gap:10px;">
+      <label style="margin:0;">🔔 到期前一天提醒</label>
+      <input type="checkbox" id="fieldReminder" style="width:20px;height:20px;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancel">取消</button>
+      <button class="btn-primary" id="btnSave">保存</button>
+    </div>
+    <div style="text-align:center;margin-top:10px;">
+      <button class="btn-danger" id="btnDelete" style="display:none;padding:10px 30px;border-radius:14px;font-size:14px;border:none;color:#fff;cursor:pointer;">删除此事件</button>
+    </div>
+  </div>
+</div>
+
+<!-- detail panel -->
+<div class="detail-mask hidden" id="detailPanel">
+  <div class="detail-sheet" id="detailSheet"></div>
+</div>
+
+<!-- update modal -->
+<div class="update-modal hidden" id="updateModal">
+  <div class="update-card">
+    <div class="u-icon">🔔</div>
+    <h3 id="updateTitle">发现新版本</h3>
+    <div class="u-log" id="updateLog"></div>
+    <div class="u-size" id="updateSize"></div>
+    <div class="u-actions">
+      <button class="btn-cancel" id="btnUpdateLater">稍后再说</button>
+      <button class="btn-primary" id="btnUpdateNow">立即更新</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════
+const STORAGE_KEY = 'daytally_events';
+const BG_KEY = 'daytally_global_bg';
+const VERSION_KEY = 'daytally_version';
+const CURRENT_VERSION = 1;
+const APP_VERSION_NAME = '1.0';
+// REPLACE with your GitHub Pages URL after deployment:
+const UPDATE_URL = 'https://051a.github.io/daytally/version.json';
+
+const PRESET_EMOJIS = ['🎉','🎂','💕','🎄','🧧','🏖','✈️','🎓','🏠','🐣','🌟','💼','⏰','🎯','💍','🎵','🍰','🌈','🔥','❤️'];
+const CATEGORIES = ['🎉节日','🎂生日','✈️旅行','📝考试','💕纪念日','📌其他'];
+const TEMPLATES = [
+  { id: '', name: '默认', preview: 'linear-gradient(135deg,#1a1a2e,#16213e)' },
+  { id: 't-g1', name: '紫霞', preview: 'linear-gradient(135deg,#667eea,#764ba2)' },
+  { id: 't-g2', name: '粉黛', preview: 'linear-gradient(135deg,#f093fb,#f5576c)' },
+  { id: 't-g3', name: '冰蓝', preview: 'linear-gradient(135deg,#4facfe,#00f2fe)' },
+  { id: 't-g4', name: '翠绿', preview: 'linear-gradient(135deg,#43e97b,#38f9d7)' },
+  { id: 't-g5', name: '暖阳', preview: 'linear-gradient(135deg,#fa709a,#fee140)' },
+  { id: 't-g6', name: '梦幻', preview: 'linear-gradient(135deg,#a18cd1,#fbc2eb)' },
+  { id: 't-g7', name: '深空', preview: 'linear-gradient(135deg,#0c0c1d,#1a1a3e 50%,#2d1b69)' },
+  { id: 't-g8', name: '海洋', preview: 'linear-gradient(135deg,#1a1a2e,#0f3443)' },
+  { id: 't-g9', name: '暮色', preview: 'linear-gradient(135deg,#3e1a47,#16213e 50%,#0f0f1a)' },
+];
+
+let events = [];
+let editingId = null;
+let selectedEmoji = '🎉';
+let selectedCategory = '';
+let selectedTemplate = '';
+let activeFilter = 'all';
+let showHistory = false;
+
+// ═══════════════════════════════════════
+//  PERSISTENCE
+// ═══════════════════════════════════════
+function loadEvents() {
+  try { events = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch(e) { events = []; }
+}
+function saveEvents() { localStorage.setItem(STORAGE_KEY, JSON.stringify(events)); }
+function loadGlobalBg() {
+  const bg = localStorage.getItem(BG_KEY);
+  if (bg) document.getElementById('globalBg').style.backgroundImage = `url(${bg})`;
+}
+function saveGlobalBg(u) { localStorage.setItem(BG_KEY, u); }
+
+// ═══════════════════════════════════════
+//  DAY CALC
+// ═══════════════════════════════════════
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function dayDiff(dateStr) {
+  const t = new Date(dateStr+'T00:00:00');
+  const n = new Date(todayStr()+'T00:00:00');
+  return Math.round((t-n)/(86400000));
+}
+function classifyEvent(ev) {
+  const diff = dayDiff(ev.date);
+  if (diff === 0) return { cls:'is-today', label:'就是今天！', num:'', raw:0, pct:100 };
+  if (diff > 0) return { cls:'is-future', label:'还有', num:diff+' 天', raw:diff, pct:0 };
+  return { cls:'is-past', label:'距今', num:Math.abs(diff)+' 天', raw:Math.abs(diff), pct:0 };
+}
+
+// ═══════════════════════════════════════
+//  IMAGE HELPERS
+// ═══════════════════════════════════════
+function compressImage(file, maxW, cb) {
+  const r = new FileReader();
+  r.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const c = document.createElement('canvas');
+      const s = Math.min(1, maxW/img.width);
+      c.width = img.width*s; c.height = img.height*s;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      cb(c.toDataURL('image/jpeg',0.75));
+    };
+    img.src = e.target.result;
+  };
+  r.readAsDataURL(file);
+}
+
+// ═══════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════
+function getFilteredEvents() {
+  const sorted = [...events].sort((a,b) => {
+    const da=dayDiff(a.date), db=dayDiff(b.date);
+    if(da===0&&db!==0) return -1; if(db===0&&da!==0) return 1;
+    return Math.abs(da)-Math.abs(db);
+  });
+  const now = sorted.filter(e => !e.archived);
+  const archived = sorted.filter(e => e.archived);
+  const filtered = activeFilter==='all' ? now : now.filter(e => e.category===activeFilter);
+  return { filtered, archived };
+}
+
+function renderEvents() {
+  const { filtered, archived } = getFilteredEvents();
+  const container = document.getElementById('eventList');
+  const histSection = document.getElementById('historySection');
+  const histList = document.getElementById('historyList');
+  const histToggle = document.getElementById('historyToggle');
+
+  if (filtered.length === 0 && activeFilter === 'all') {
+    container.innerHTML = `<div class="empty-state"><div class="big-emoji">📅</div><p>还没有日子，点击下方添加吧</p></div>`;
+  } else if (filtered.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="big-emoji">🔍</div><p>这个分类下没有事件</p></div>`;
+  } else {
+    container.innerHTML = filtered.map(ev => renderCard(ev)).join('');
+  }
+
+  // history
+  if (archived.length > 0) {
+    histSection.style.display = '';
+    histToggle.textContent = showHistory ? '📦 收起历史 ('+archived.length+')' : '📦 查看历史事件 ('+archived.length+')';
+    histList.innerHTML = showHistory ? archived.map(ev => renderCard(ev, true)).join('') : '';
+    histList.style.display = showHistory ? '' : 'none';
+  } else {
+    histSection.style.display = 'none';
+  }
+
+  bindCardEvents();
+}
+
+function renderCard(ev, isArchived) {
+  const info = classifyEvent(ev);
+  const hasImg = !!ev.image;
+  const tClass = (!hasImg && ev.cardStyle) ? ev.cardStyle : '';
+  const bgStyle = hasImg ? `background-image:url(${ev.image});filter:blur(${ev.blur||0}px);` : '';
+  const catTag = ev.category ? `<span class="event-cat">${ev.category}</span>` : '';
+  const progressHtml = (info.cls==='is-future'&&ev.date) ? progressBar(ev.date) : '';
+
+  return `<div class="card ${info.cls} ${tClass}" data-id="${ev.id}">
+    <div class="card-bg" style="${bgStyle}"></div>
+    <div class="card-overlay"></div>
+    <div class="card-content">
+      <div class="card-top">
+        <span class="event-name"><span class="event-emoji">${ev.emoji||'📅'}</span>${escHtml(ev.name)}${catTag}</span>
+        <span class="event-date">${ev.date}</span>
+      </div>
+      <div class="days-number">${info.num || info.label}</div>
+      <div class="days-label">${info.num ? info.label : ''}</div>
+      ${progressHtml}
+      <div class="card-controls">
+        ${hasImg ? `<div class="blur-group"><label>🌫</label><input type="range" min="0" max="20" value="${ev.blur||0}" data-id="${ev.id}" class="blur-slider"><span class="blur-val">${ev.blur||0}px</span></div>` : ''}
+        <button class="btn-icon" title="换图片" data-action="image" data-id="${ev.id}">🖼</button>
+        <button class="btn-icon" title="编辑" data-action="edit" data-id="${ev.id}">✎</button>
+        ${isArchived ? '<button class="btn-icon" title="恢复" data-action="unarchive" data-id="'+ev.id+'">📤</button>' : ''}
+        <button class="btn-icon danger" title="删除" data-action="delete" data-id="${ev.id}">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function progressBar(dateStr) {
+  const diff = dayDiff(dateStr);
+  if (diff <= 0) return '';
+  // estimate total span based on typical countdown (max 365 days for progress)
+  const total = Math.max(diff, 30);
+  const pct = Math.max(0, Math.min(100, Math.round((total - diff) / total * 100)));
+  return `<div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+}
+
+function bindCardEvents() {
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', function(e) {
+      // if a button was clicked, skip detail panel
+      if (e.target.closest('[data-action]') || e.target.closest('input')) return;
+      openDetail(this.dataset.id);
+    });
+    // button actions
+    card.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const id = this.dataset.id;
+        const act = this.dataset.action;
+        if (act === 'edit') openEditModal(id);
+        if (act === 'delete') deleteEvent(id);
+        if (act === 'image') openCardImagePicker(id);
+        if (act === 'unarchive') { const ev=events.find(x=>x.id===id); if(ev){ev.archived=false;saveEvents();renderEvents();} }
+      });
+    });
+  });
+  // blur sliders
+  document.querySelectorAll('.blur-slider').forEach(s => {
+    s.addEventListener('input', function(e) {
+      e.stopPropagation();
+      const id=this.dataset.id, val=parseInt(this.value);
+      const ev=events.find(x=>x.id===id);
+      if(ev){ev.blur=val;saveEvents();this.closest('.card').querySelector('.card-bg').style.filter=`blur(${val}px)`;this.parentElement.querySelector('.blur-val').textContent=val+'px';}
+    });
+  });
+}
+
+function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// ═══════════════════════════════════════
+//  DETAIL PANEL
+// ═══════════════════════════════════════
+let detailEventId = null;
+function openDetail(id) {
+  const ev = events.find(e => e.id === id); if (!ev) return;
+  detailEventId = id;
+  const info = classifyEvent(ev);
+  const sheet = document.getElementById('detailSheet');
+  const noteBlock = ev.note ? `<div class="d-note">${escHtml(ev.note)}</div>` : '';
+  const progressBlock = (info.cls==='is-future') ? `<div class="d-progress"><div class="d-progress-fill" style="width:${progressPct(ev.date)}%;background:linear-gradient(90deg,#5E5CE6,#8B5CF6)"></div></div>` : '';
+
+  sheet.innerHTML = `
+    <div style="text-align:right;margin-bottom:8px;"><button class="btn-icon" id="btnCloseDetail" style="font-size:20px;">✕</button></div>
+    <div style="text-align:center;font-size:48px;">${ev.emoji||'📅'}</div>
+    <div style="text-align:center;font-size:22px;font-weight:700;margin:6px 0;">${escHtml(ev.name)}</div>
+    ${ev.category ? `<div style="text-align:center;margin-bottom:8px;"><span class="event-cat">${ev.category}</span></div>` : ''}
+    <div class="d-num" style="color:${info.cls==='is-today'?'#FFD60A':info.cls==='is-future'?'#5E5CE6':'#30D158'}">${info.num || info.label}</div>
+    <div class="d-label">${info.num ? info.label : ''}</div>
+    ${progressBlock}
+    <div class="d-info">
+      <div class="d-info-item"><div class="d-info-val">${ev.date}</div><div class="d-info-lbl">目标日期</div></div>
+      <div class="d-info-item"><div class="d-info-val">${info.raw||0}</div><div class="d-info-lbl">${info.cls==='is-past'?'已过天数':'剩余天数'}</div></div>
+    </div>
+    ${noteBlock}
+    <div class="d-actions">
+      <button class="btn-icon" id="btnDetailEdit" style="flex:1;border-radius:14px;padding:13px;">✎ 编辑</button>
+      <button class="btn-icon" id="btnDetailArchive" style="flex:1;border-radius:14px;padding:13px;">📦 ${ev.archived?'恢复':'归档'}</button>
+      <button class="btn-icon danger" id="btnDetailDelete" style="flex:1;border-radius:14px;padding:13px;">✕ 删除</button>
+    </div>
+  `;
+  document.getElementById('detailPanel').classList.remove('hidden');
+  document.getElementById('btnCloseDetail').onclick = closeDetail;
+  document.getElementById('btnDetailEdit').onclick = function(){ closeDetail(); openEditModal(id); };
+  document.getElementById('btnDetailArchive').onclick = function(){
+    ev.archived = !ev.archived; saveEvents(); closeDetail(); renderEvents();
+  };
+  document.getElementById('btnDetailDelete').onclick = function(){
+    if(confirm('确定删除？')){ events = events.filter(e=>e.id!==id); saveEvents(); closeDetail(); renderEvents(); }
+  };
+}
+function closeDetail() { document.getElementById('detailPanel').classList.add('hidden'); detailEventId = null; }
+function progressPct(dateStr) {
+  const diff = dayDiff(dateStr); if (diff <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((365-diff)/365*100)));
+}
+document.getElementById('detailPanel').addEventListener('click', function(e) { if(e.target===this) closeDetail(); });
+
+// ═══════════════════════════════════════
+//  EVENT CRUD
+// ═══════════════════════════════════════
+function deleteEvent(id) {
+  if(!confirm('确定删除？')) return;
+  events = events.filter(e=>e.id!==id); saveEvents(); renderEvents();
+}
+function openAddModal() {
+  editingId = null; selectedEmoji = '🎉'; selectedCategory = ''; selectedTemplate = '';
+  document.getElementById('modalTitle').textContent = '添加新日子';
+  document.getElementById('fieldName').value = '';
+  document.getElementById('fieldDate').value = todayStr();
+  document.getElementById('fieldNote').value = '';
+  document.getElementById('fieldReminder').checked = false;
+  document.getElementById('btnDelete').style.display = 'none';
+  renderSelectors();
+  document.getElementById('eventModal').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('fieldName').focus(),300);
+}
+function openEditModal(id) {
+  const ev = events.find(e=>e.id===id); if(!ev) return;
+  editingId = id;
+  selectedEmoji = ev.emoji||'🎉'; selectedCategory = ev.category||''; selectedTemplate = ev.cardStyle||'';
+  document.getElementById('modalTitle').textContent = '编辑日子';
+  document.getElementById('fieldName').value = ev.name;
+  document.getElementById('fieldDate').value = ev.date;
+  document.getElementById('fieldNote').value = ev.note||'';
+  document.getElementById('fieldReminder').checked = !!ev.reminder;
+  document.getElementById('btnDelete').style.display = '';
+  renderSelectors();
+  document.getElementById('eventModal').classList.remove('hidden');
+}
+function saveEvent() {
+  const name = document.getElementById('fieldName').value.trim();
+  const date = document.getElementById('fieldDate').value;
+  const note = document.getElementById('fieldNote').value.trim();
+  const reminder = document.getElementById('fieldReminder').checked;
+  if(!name){alert('请输入名称');return;} if(!date){alert('请选择日期');return;}
+  if(editingId) {
+    const ev = events.find(e=>e.id===editingId);
+    if(ev){ ev.name=name; ev.date=date; ev.emoji=selectedEmoji; ev.category=selectedCategory; ev.cardStyle=selectedTemplate; ev.note=note; ev.reminder=reminder; }
+  } else {
+    events.push({
+      id: crypto.randomUUID?crypto.randomUUID():'id_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+      name, date, emoji:selectedEmoji, category:selectedCategory, cardStyle:selectedTemplate,
+      image:'', blur:0, note, reminder, archived:false
+    });
+  }
+  saveEvents(); closeModal(); renderEvents();
+}
+function closeModal() { document.getElementById('eventModal').classList.add('hidden'); editingId=null; }
+document.getElementById('btnCancel').addEventListener('click',closeModal);
+document.getElementById('btnSave').addEventListener('click',saveEvent);
+document.getElementById('eventModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+document.getElementById('btnDelete').addEventListener('click',function(){
+  if(editingId&&confirm('确定删除？')){deleteEvent(editingId);closeModal();}
+});
+
+// ═══════════════════════════════════════
+//  SELECTORS
+// ═══════════════════════════════════════
+function renderSelectors() {
+  // categories
+  document.getElementById('catGrid').innerHTML = CATEGORIES.map(c =>
+    `<span class="cat-option${c===selectedCategory?' option-selected':''}" data-val="${c}">${c}</span>`
+  ).join('');
+  document.getElementById('catGrid').querySelectorAll('.cat-option').forEach(el =>
+    el.addEventListener('click', function(){ selectedCategory=this.dataset.val; renderSelectors(); })
+  );
+  // templates
+  document.getElementById('templateGrid').innerHTML = TEMPLATES.map(t =>
+    `<span class="template-option${t.id===selectedTemplate?' option-selected':''}" data-val="${t.id}" title="${t.name}" style="background:${t.preview}"></span>`
+  ).join('');
+  document.getElementById('templateGrid').querySelectorAll('.template-option').forEach(el =>
+    el.addEventListener('click', function(){ selectedTemplate=this.dataset.val; renderSelectors(); })
+  );
+  // emojis
+  document.getElementById('emojiGrid').innerHTML = PRESET_EMOJIS.map(e =>
+    `<span class="emoji-option${e===selectedEmoji?' option-selected':''}" data-val="${e}">${e}</span>`
+  ).join('');
+  document.getElementById('emojiGrid').querySelectorAll('.emoji-option').forEach(el =>
+    el.addEventListener('click', function(){ selectedEmoji=this.dataset.val; renderSelectors(); })
+  );
+}
+
+// ═══════════════════════════════════════
+//  CATEGORY FILTER
+// ═══════════════════════════════════════
+document.getElementById('catTabs').addEventListener('click', function(e) {
+  const tab = e.target.closest('.cat-tab'); if(!tab) return;
+  activeFilter = tab.dataset.cat;
+  this.querySelectorAll('.cat-tab').forEach(t=>t.classList.remove('active'));
+  tab.classList.add('active');
+  renderEvents();
+});
+
+// ═══════════════════════════════════════
+//  IMAGE PICKERS
+// ═══════════════════════════════════════
+let pendingCardImageId = null;
+function openCardImagePicker(id) { pendingCardImageId=id; document.getElementById('cardFileInput').click(); }
+document.getElementById('cardFileInput').addEventListener('change', function(){
+  if(!this.files||!this.files[0]||!pendingCardImageId) return;
+  compressImage(this.files[0], 400, function(url){
+    const ev=events.find(e=>e.id===pendingCardImageId);
+    if(ev){ev.image=url;ev.blur=ev.blur||0;saveEvents();renderEvents();}
+    pendingCardImageId=null;
+  });
+  this.value='';
+});
+document.getElementById('btnGlobalBg').addEventListener('click', ()=>document.getElementById('globalFileInput').click());
+document.getElementById('globalFileInput').addEventListener('change', function(){
+  if(!this.files||!this.files[0]) return;
+  compressImage(this.files[0], 800, function(url){ saveGlobalBg(url); document.getElementById('globalBg').style.backgroundImage=`url(${url})`; });
+  this.value='';
+});
+
+// ═══════════════════════════════════════
+//  HISTORY TOGGLE
+// ═══════════════════════════════════════
+document.getElementById('historyToggle').addEventListener('click', function(){
+  showHistory = !showHistory; renderEvents();
+});
+
+// ═══════════════════════════════════════
+//  AUTO ARCHIVE (past 30+ days)
+// ═══════════════════════════════════════
+function autoArchive() {
+  let changed = false;
+  events.forEach(e => {
+    if (!e.archived && dayDiff(e.date) < -30) { e.archived = true; changed = true; }
+  });
+  if (changed) saveEvents();
+}
+
+// ═══════════════════════════════════════
+//  REMINDER CHECK
+// ═══════════════════════════════════════
+function checkReminders() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  if (Notification.permission !== 'granted') return;
+  const tomorrow = new Date(todayStr()+'T00:00:00');
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomStr = tomorrow.getFullYear()+'-'+String(tomorrow.getMonth()+1).padStart(2,'0')+'-'+String(tomorrow.getDate()).padStart(2,'0');
+
+  events.forEach(e => {
+    if (e.reminder && e.date === tomStr && !e.archived) {
+      new Notification('日子提醒', {
+        body: `「${e.name}」${dayDiff(e.date)>0?'将在明天到来':'就是明天'}！`,
+        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">📅</text></svg>',
+        tag: 'daytally-'+e.id
+      });
+    }
+  });
+}
+
+// ═══════════════════════════════════════
+//  OTA UPDATE CHECK
+// ═══════════════════════════════════════
+async function checkUpdate(silent) {
+  try {
+    const resp = await fetch(UPDATE_URL, { cache: 'no-cache' });
+    if (!resp.ok) throw new Error('HTTP '+resp.status);
+    const info = await resp.json();
+    if (info.versionCode > CURRENT_VERSION) {
+      document.getElementById('updateTitle').textContent = '🔔 发现新版本 '+info.versionName;
+      document.getElementById('updateLog').textContent = info.changelog || '';
+      document.getElementById('updateSize').textContent = '大小: '+(info.apkSize||'未知');
+      document.getElementById('updateModal').classList.remove('hidden');
+      localStorage.setItem(VERSION_KEY, info.versionCode);
+    } else if (!silent) {
+      alert('已是最新版本 ('+APP_VERSION_NAME+')');
+    }
+  } catch(e) {
+    if (!silent) alert('检查更新失败: '+e.message);
+  }
+}
+document.getElementById('btnCheckUpdate').addEventListener('click', ()=>checkUpdate(false));
+document.getElementById('btnUpdateNow').addEventListener('click', function(){
+  fetch(UPDATE_URL, {cache:'no-cache'}).then(r=>r.json()).then(info=>{
+    window.open(info.apkUrl, '_blank');
+  }).catch(()=>{});
+  document.getElementById('updateModal').classList.add('hidden');
+});
+document.getElementById('btnUpdateLater').addEventListener('click', function(){
+  document.getElementById('updateModal').classList.add('hidden');
+});
+
+// ═══════════════════════════════════════
+//  TOOLBAR
+// ═══════════════════════════════════════
+document.getElementById('addBtn').addEventListener('click', openAddModal);
+document.getElementById('btnExport').addEventListener('click', function(){
+  const data = { events, globalBg: localStorage.getItem(BG_KEY)||'', exportedAt: new Date().toISOString() };
+  const b = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download='daytally-backup-'+todayStr()+'.json'; a.click();
+});
+document.getElementById('btnImport').addEventListener('click', function(){
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = function(){
+    if(!this.files||!this.files[0]) return;
+    const r=new FileReader();
+    r.onload=function(e){
+      try{
+        const d=JSON.parse(e.target.result);
+        if(!d.events||!Array.isArray(d.events)){alert('无效的备份文件');return;}
+        if(!confirm(`即将导入 ${d.events.length} 个事件，会覆盖现有数据，确认？`)) return;
+        events=d.events; saveEvents();
+        if(d.globalBg){saveGlobalBg(d.globalBg);loadGlobalBg();}
+        renderEvents(); alert('导入成功！');
+      }catch(err){alert('解析失败: '+err.message);}
+    };
+    r.readAsText(this.files[0]);
+  };
+  inp.click();
+});
+
+// ═══════════════════════════════════════
+//  PERIODIC
+// ═══════════════════════════════════════
+setInterval(function(){
+  const prev = document.body.dataset.lastDay||'';
+  const curr = todayStr();
+  if (prev !== curr) {
+    document.body.dataset.lastDay = curr;
+    loadEvents(); autoArchive(); renderEvents(); checkReminders();
+  }
+}, 30000);
+
+// ═══════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════
+function init() {
+  loadEvents(); loadGlobalBg(); autoArchive();
+  document.body.dataset.lastDay = todayStr();
+  document.getElementById('verLabel').textContent = APP_VERSION_NAME;
+  renderEvents(); renderSelectors();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  }
+  document.addEventListener('keydown', function(e) { if (e.key==='Escape') { closeModal(); closeDetail(); } });
+  // startup update check (silent, delay 3s to not block UI)
+  setTimeout(() => checkUpdate(true), 3000);
+  // reminder check
+  setTimeout(checkReminders, 2000);
+}
+init();
+</script>
+</body>
+</html>
